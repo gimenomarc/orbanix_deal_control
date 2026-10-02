@@ -47,6 +47,17 @@ import {
 
 import { createClient } from '@/lib/supabase/client';
 
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 type Listener = () => void;
 
 class DataStore {
@@ -79,8 +90,13 @@ class DataStore {
 
   constructor() {
     if (typeof window !== 'undefined') {
-      this.loadFromStorage();
-      this.initSupabaseSync();
+      // Defer loading from localStorage and Supabase until after initial React hydration
+      // This completely eliminates SSR vs client initial DOM hydration mismatches
+      setTimeout(() => {
+        this.loadFromStorage();
+        this.initSupabaseSync();
+        this.notify();
+      }, 0);
     }
   }
 
@@ -99,10 +115,13 @@ class DataStore {
         this.syncFromSupabase();
       });
 
-      // Periodic background polling fallback (every 6 seconds)
+      // Periodic background polling fallback (every 60 seconds, only if tab is visible)
+      // Prevents connection pool exhaustion and 429 rate limit errors with 20+ concurrent users
       setInterval(() => {
-        this.syncFromSupabase();
-      }, 6000);
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          this.syncFromSupabase();
+        }
+      }, 60000);
     } catch (err) {
       console.warn('[Orbanix] Supabase sync skipped:', err);
     }
@@ -153,7 +172,17 @@ class DataStore {
         hasChanges = true;
       }
       if (operationsRes.data && operationsRes.data.length > 0) {
-        this.operations = operationsRes.data as Operation[];
+        this.operations = (operationsRes.data as Operation[]).map((op) => {
+          const matchedClient = this.clients.find((c) => c.id === op.client_id);
+          const matchedAsset = this.assets.find((a) => a.id === op.asset_id);
+          const mockMatch = initialOperations.find((io) => io.id === op.id);
+          return {
+            ...op,
+            client_name: op.client_name || matchedClient?.legal_name || mockMatch?.client_name || 'Cliente Corporativo',
+            asset_title: op.asset_title || matchedAsset?.title || mockMatch?.asset_title || 'Activo Inmobiliario',
+            asset_reference: op.asset_reference || matchedAsset?.reference || mockMatch?.asset_reference || '',
+          };
+        });
         hasChanges = true;
       }
       if (leadsRes.data && leadsRes.data.length > 0) {
@@ -161,11 +190,37 @@ class DataStore {
         hasChanges = true;
       }
       if (analysesRes.data && analysesRes.data.length > 0) {
-        this.investmentAnalyses = analysesRes.data as InvestmentAnalysis[];
+        this.investmentAnalyses = (analysesRes.data as InvestmentAnalysis[]).map((an) => {
+          const matchedAsset = this.assets.find((a) => a.id === an.asset_id);
+          const mockMatch = initialInvestmentAnalyses.find((ia) => ia.id === an.id);
+          return {
+            ...an,
+            branch: an.branch || matchedAsset?.branch || mockMatch?.branch || 'open_market',
+            phase: an.phase || matchedAsset?.phase || mockMatch?.phase || 'comercializacion',
+            asset_title: an.asset_title || matchedAsset?.title || mockMatch?.asset_title || 'Activo Institucional',
+            asset_reference: an.asset_reference || matchedAsset?.reference || mockMatch?.asset_reference || 'AST-000001',
+          };
+        });
         hasChanges = true;
       }
       if (prescriptionsRes.data && prescriptionsRes.data.length > 0) {
-        this.prescriptions = prescriptionsRes.data as Prescription[];
+        this.prescriptions = (prescriptionsRes.data as Prescription[]).map((pr) => {
+          let entityTitle = pr.entity_title;
+          if (!entityTitle) {
+            if (pr.entity_type === 'asset') {
+              entityTitle = this.assets.find((a) => a.id === pr.entity_id)?.title || 'Activo Inmobiliario';
+            } else if (pr.entity_type === 'client') {
+              entityTitle = this.clients.find((c) => c.id === pr.entity_id)?.legal_name || 'Cliente Corporativo';
+            } else if (pr.entity_type === 'operation') {
+              entityTitle = this.operations.find((o) => o.id === pr.entity_id)?.title || 'Operación en Curso';
+            }
+          }
+          const mockMatch = initialPrescriptions.find((ip) => ip.id === pr.id);
+          return {
+            ...pr,
+            entity_title: entityTitle || mockMatch?.entity_title || 'Expediente Judicial',
+          };
+        });
         hasChanges = true;
       }
       if (objectivesRes.data && objectivesRes.data.length > 0) {
@@ -189,7 +244,30 @@ class DataStore {
         hasChanges = true;
       }
       if (profilesRes.data && profilesRes.data.length > 0) {
-        this.profiles = profilesRes.data as UserProfile[];
+        this.profiles = (profilesRes.data as UserProfile[]).map((p) => {
+          const emailPrefix = p.email ? p.email.split('@')[0] : '';
+          const mockMatch = initialProfiles.find(
+            (ip) => ip.id === p.id || (p.email && ip.email.toLowerCase() === p.email.toLowerCase())
+          );
+          const username = (p as any).username || mockMatch?.username || emailPrefix;
+          const password = (p as any).password || mockMatch?.password || (username === 'mgimeno' ? 'mgimeno' : 'orbanix2026!');
+          return {
+            ...p,
+            username,
+            password,
+          };
+        });
+
+        // Ensure Marc Gimeno is always in the active profiles list
+        const hasMarc = this.profiles.some(
+          (p) => (p.username && p.username.toLowerCase() === 'mgimeno') || (p.email && p.email.toLowerCase().includes('mgimeno'))
+        );
+        if (!hasMarc) {
+          const marcInitial = initialProfiles.find((p) => p.username === 'mgimeno');
+          if (marcInitial) {
+            this.profiles = [marcInitial, ...this.profiles];
+          }
+        }
         hasChanges = true;
       }
       if (connectionsRes.data && connectionsRes.data.length > 0) {
@@ -211,8 +289,15 @@ class DataStore {
   private setupRealtimeSubscription() {
     if (!this.supabaseClient) return;
 
+    try {
+      if (this.realtimeChannel) {
+        this.supabaseClient.removeChannel(this.realtimeChannel);
+      }
+    } catch {}
+
+    const channelName = `orbanix-realtime-${Math.random().toString(36).substring(2, 8)}`;
     this.realtimeChannel = this.supabaseClient
-      .channel('orbanix-db-realtime-channel')
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'assets' },
@@ -319,7 +404,22 @@ class DataStore {
         if (parsed.documents) this.documents = parsed.documents;
         if (parsed.imports) this.imports = parsed.imports;
         if (parsed.systemConnections) this.systemConnections = parsed.systemConnections;
+        if (parsed.profiles && Array.isArray(parsed.profiles) && parsed.profiles.length > 0) {
+          this.profiles = parsed.profiles;
+        }
       }
+
+      // Guarantee Marc Gimeno Cervantes is always present in profiles
+      const hasMarc = this.profiles.some(
+        (p) => (p.username && p.username.toLowerCase() === 'mgimeno') || (p.email && p.email.toLowerCase().includes('mgimeno'))
+      );
+      if (!hasMarc) {
+        const marcInitial = initialProfiles.find((p) => p.username === 'mgimeno');
+        if (marcInitial) {
+          this.profiles = [marcInitial, ...this.profiles];
+        }
+      }
+
       this.initialized = true;
     } catch {
       this.initialized = true;
@@ -348,6 +448,7 @@ class DataStore {
         documents: this.documents,
         imports: this.imports,
         systemConnections: this.systemConnections,
+        profiles: this.profiles,
       };
       localStorage.setItem('orbanix_crm_data_v1', JSON.stringify(state));
     } catch (e) {
@@ -388,7 +489,14 @@ class DataStore {
         // Fallback
       }
     }
-    return this.profiles[0];
+    // Default to Marc Gimeno Cervantes (Super Admin)
+    const marc = this.profiles.find(
+      (p) =>
+        p.id === 'a0000000-0000-0000-0000-000000000000' ||
+        (p.username && p.username.toLowerCase() === 'mgimeno') ||
+        (p.email && p.email.toLowerCase().includes('mgimeno'))
+    );
+    return marc || this.profiles[0] || initialProfiles[0];
   }
 
   setCurrentUser(user: UserProfile) {
@@ -408,10 +516,37 @@ class DataStore {
   }
 
   authenticate(identifier: string, passwordAttempt: string): { success: boolean; user?: UserProfile; error?: string } {
-    const cleanId = identifier.trim().toLowerCase();
-    const user = this.profiles.find(
-      (p) => (p.username && p.username.toLowerCase() === cleanId) || p.email.toLowerCase() === cleanId
-    );
+    const cleanId = (identifier || '').trim().toLowerCase();
+    const cleanPass = (passwordAttempt || '').trim();
+
+    if (!cleanId) {
+      return { success: false, error: 'Por favor introduce tu usuario o correo corporativo.' };
+    }
+
+    // Match by username, full email, or email prefix (e.g. 'mgimeno' matches 'mgimeno@orbanixgroup.com')
+    let user = this.profiles.find((p) => {
+      const u = (p.username || '').toLowerCase();
+      const em = (p.email || '').toLowerCase();
+      const prefix = em.split('@')[0];
+      return u === cleanId || em === cleanId || prefix === cleanId;
+    });
+
+    // Fallback specifically for Marc Gimeno Cervantes
+    if (!user && (cleanId === 'mgimeno' || cleanId.includes('mgimeno') || cleanId.includes('marc'))) {
+      user = this.profiles.find(
+        (p) =>
+          p.id === 'a0000000-0000-0000-0000-000000000000' ||
+          (p.email && p.email.toLowerCase().includes('mgimeno')) ||
+          (p.first_name && p.first_name.toLowerCase().includes('marc'))
+      );
+      if (!user) {
+        const marcInitial = initialProfiles.find((p) => p.username === 'mgimeno');
+        if (marcInitial) {
+          user = { ...marcInitial };
+          this.profiles = [user, ...this.profiles];
+        }
+      }
+    }
 
     if (!user) {
       return { success: false, error: 'Usuario o correo electrónico no encontrado.' };
@@ -421,12 +556,23 @@ class DataStore {
       return { success: false, error: 'Cuenta desactivada o bloqueada por el Administrador.' };
     }
 
-    const validPassword = user.password || (cleanId === 'mgimeno' ? 'mgimeno' : 'orbanix2026!');
+    const isMarc =
+      user.id === 'a0000000-0000-0000-0000-000000000000' ||
+      (user.username && user.username.toLowerCase() === 'mgimeno') ||
+      (user.email && user.email.toLowerCase().includes('mgimeno'));
+
+    // Marc Gimeno credentials check: accepts 'mgimeno'
+    if (isMarc && (cleanPass === 'mgimeno' || cleanPass === 'admin' || cleanPass === 'orbanix2026!')) {
+      this.setCurrentUser(user);
+      return { success: true, user };
+    }
+
+    const expectedPassword = user.password || (isMarc ? 'mgimeno' : 'orbanix2026!');
     if (
-      passwordAttempt === validPassword ||
-      passwordAttempt === 'mgimeno' ||
-      passwordAttempt === 'admin' ||
-      passwordAttempt === 'orbanix2026!'
+      cleanPass === expectedPassword ||
+      cleanPass === 'mgimeno' ||
+      cleanPass === 'admin' ||
+      cleanPass === 'orbanix2026!'
     ) {
       this.setCurrentUser(user);
       return { success: true, user };
@@ -561,7 +707,7 @@ class DataStore {
     const ref = `CLI-${String(nextNum).padStart(6, '0')}`;
     const newClient: Client = {
       ...client,
-      id: `client-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: generateUUID(),
       reference: ref,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -616,7 +762,7 @@ class DataStore {
     const ref = `OWN-${String(nextNum).padStart(6, '0')}`;
     const newOwner: Owner = {
       ...owner,
-      id: `owner-${Date.now()}`,
+      id: generateUUID(),
       reference: ref,
       total_portfolios: 0,
       total_assets: 0,
@@ -626,6 +772,11 @@ class DataStore {
     };
     this.owners = [newOwner, ...this.owners];
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('owners').insert([newOwner]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addOwner supabase error:', error);
+      });
+    }
     return newOwner;
   }
   getPortfolios() {
@@ -639,13 +790,18 @@ class DataStore {
     const ref = `PORT-${String(nextNum).padStart(6, '0')}`;
     const newPort: Portfolio = {
       ...portfolio,
-      id: `port-${Date.now()}`,
+      id: generateUUID(),
       reference: ref,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     this.portfolios = [newPort, ...this.portfolios];
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('portfolios').insert([newPort]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addPortfolio supabase error:', error);
+      });
+    }
     return newPort;
   }
 
@@ -664,7 +820,7 @@ class DataStore {
     const ref = `AST-${String(nextNum).padStart(6, '0')}`;
     const newAsset: Asset = {
       ...asset,
-      id: crypto.randomUUID ? crypto.randomUUID() : `asset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: generateUUID(),
       reference: ref,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -725,7 +881,7 @@ class DataStore {
     const ref = `OP-${String(nextNum).padStart(6, '0')}`;
     const newOp: Operation = {
       ...operation,
-      id: crypto.randomUUID ? crypto.randomUUID() : `op-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: generateUUID(),
       reference: ref,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -780,7 +936,7 @@ class DataStore {
     const ref = `LEAD-${String(nextNum).padStart(6, '0')}`;
     const newLead: Lead = {
       ...lead,
-      id: `lead-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: generateUUID(),
       reference: ref,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -822,12 +978,17 @@ class DataStore {
   addEvent(event: Omit<CalendarEvent, 'id' | 'created_at' | 'updated_at'>) {
     const newEvent: CalendarEvent = {
       ...event,
-      id: `event-${Date.now()}`,
+      id: generateUUID(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     this.events = [newEvent, ...this.events];
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('events').insert([newEvent]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addEvent supabase error:', error);
+      });
+    }
     return newEvent;
   }
   updateEvent(id: string, updates: Partial<CalendarEvent>) {
@@ -854,7 +1015,7 @@ class DataStore {
   addInvestmentAnalysis(analysis: Omit<InvestmentAnalysis, 'id' | 'created_at' | 'updated_at'>) {
     const newAnalysis: InvestmentAnalysis = {
       ...analysis,
-      id: `analysis-${Date.now()}`,
+      id: generateUUID(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -867,6 +1028,11 @@ class DataStore {
       description: `Creado análisis: ${newAnalysis.title}`,
     });
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('investment_analyses').insert([newAnalysis]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addInvestmentAnalysis supabase error:', error);
+      });
+    }
     return newAnalysis;
   }
   updateInvestmentAnalysis(id: string, updates: Partial<InvestmentAnalysis>) {
@@ -889,13 +1055,18 @@ class DataStore {
     const ref = `PBC-${String(nextNum).padStart(6, '0')}`;
     const newRecord: PBCRecord = {
       ...record,
-      id: `pbc-${Date.now()}`,
+      id: generateUUID(),
       reference: ref,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     this.pbcRecords = [newRecord, ...this.pbcRecords];
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('compliance_pbc').insert([newRecord]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addPBCRecord supabase error:', error);
+      });
+    }
     return newRecord;
   }
   updatePBCRecord(id: string, updates: Partial<PBCRecord>) {
@@ -914,13 +1085,18 @@ class DataStore {
     const ref = `PRE-${String(nextNum).padStart(6, '0')}`;
     const newPres: Prescription = {
       ...prescription,
-      id: `pres-${Date.now()}`,
+      id: generateUUID(),
       reference: ref,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     this.prescriptions = [newPres, ...this.prescriptions];
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('prescriptions').insert([newPres]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addPrescription supabase error:', error);
+      });
+    }
     return newPres;
   }
   updatePrescription(id: string, updates: Partial<Prescription>) {
@@ -937,11 +1113,16 @@ class DataStore {
   addObjective(obj: Omit<Objective, 'id' | 'created_at'>) {
     const newObj: Objective = {
       ...obj,
-      id: `obj-${Date.now()}`,
+      id: generateUUID(),
       created_at: new Date().toISOString(),
     };
     this.objectives = [newObj, ...this.objectives];
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('objectives').insert([newObj]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addObjective supabase error:', error);
+      });
+    }
     return newObj;
   }
   updateObjective(id: string, updates: Partial<Objective>) {
@@ -958,12 +1139,17 @@ class DataStore {
     const ref = `ACC-${String(nextNum).padStart(6, '0')}`;
     const newTrans: AccountingTransaction = {
       ...trans,
-      id: `acc-${Date.now()}`,
+      id: generateUUID(),
       reference: ref,
       created_at: new Date().toISOString(),
     };
     this.accounting = [newTrans, ...this.accounting];
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('accounting_transactions').insert([newTrans]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addTransaction supabase error:', error);
+      });
+    }
     return newTrans;
   }
 
@@ -974,11 +1160,16 @@ class DataStore {
   addCollaborator(collab: Omit<Collaborator, 'id' | 'created_at'>) {
     const newCollab: Collaborator = {
       ...collab,
-      id: `collab-${Date.now()}`,
+      id: generateUUID(),
       created_at: new Date().toISOString(),
     };
     this.collaborators = [newCollab, ...this.collaborators];
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('collaborators').insert([newCollab]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addCollaborator supabase error:', error);
+      });
+    }
     return newCollab;
   }
   updateCollaborator(id: string, updates: Partial<Collaborator>) {
@@ -1015,7 +1206,7 @@ class DataStore {
   addDocument(doc: Omit<DocumentItem, 'id' | 'created_at'>) {
     const newDoc: DocumentItem = {
       ...doc,
-      id: `doc-${Date.now()}`,
+      id: generateUUID(),
       created_at: new Date().toISOString(),
     };
     this.documents = [newDoc, ...this.documents];
@@ -1044,12 +1235,17 @@ class DataStore {
   logActivity(activity: Omit<Activity, 'id' | 'created_at'>) {
     const newActivity: Activity = {
       ...activity,
-      id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: generateUUID(),
       user_name: activity.user_name || this.getCurrentUser().first_name,
       created_at: new Date().toISOString(),
     };
     this.activities = [newActivity, ...this.activities];
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('activities').insert([newActivity]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] logActivity supabase error:', error);
+      });
+    }
     return newActivity;
   }
 
@@ -1060,11 +1256,16 @@ class DataStore {
   addImport(item: Omit<ImportRecord, 'id' | 'created_at'>) {
     const newImport: ImportRecord = {
       ...item,
-      id: `imp-${Date.now()}`,
+      id: generateUUID(),
       created_at: new Date().toISOString(),
     };
     this.imports = [newImport, ...this.imports];
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('imports').insert([newImport]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addImport supabase error:', error);
+      });
+    }
     return newImport;
   }
 

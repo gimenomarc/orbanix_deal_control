@@ -168,7 +168,7 @@ export default function EquipoPage() {
                 <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${r.badgeColor}`}>
                   {r.shortLabel}
                 </span>
-                <span className="text-[11px] font-bold text-neutral-400">
+                <span suppressHydrationWarning className="text-[11px] font-bold text-neutral-400">
                   {profiles.filter((p) => p.role === r.role).length}
                 </span>
               </div>

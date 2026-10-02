@@ -184,7 +184,7 @@ export default function InvestmentPage() {
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <Badge variant="outline" className="font-mono text-[10px] uppercase">
-                        {analysis.branch}
+                        {analysis.branch || 'open_market'}
                       </Badge>
                       <Badge
                         variant={
