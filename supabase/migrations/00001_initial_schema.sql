@@ -310,6 +310,8 @@ CREATE TABLE IF NOT EXISTS prescriptions (
     due_date DATE NOT NULL,
     status TEXT NOT NULL DEFAULT 'vigente' CHECK (status IN ('vigente', 'proximo', 'vencido', 'resuelto')),
     responsible_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    responsible_name TEXT NOT NULL DEFAULT 'Responsable Legal',
+    days_remaining INTEGER NOT NULL DEFAULT 30,
     notes TEXT,
     auto_alert BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
