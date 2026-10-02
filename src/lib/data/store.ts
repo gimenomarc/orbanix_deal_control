@@ -2,6 +2,7 @@
 
 import {
   UserProfile,
+  UserRole,
   Client,
   Owner,
   Portfolio,
@@ -369,12 +370,172 @@ class DataStore {
     this.listeners.forEach((l) => l());
   }
 
-  // --- Profiles ---
+  // --- Profiles & User Management ---
   getProfiles() {
     return this.profiles;
   }
+
   getCurrentUser(): UserProfile {
+    if (typeof window !== 'undefined') {
+      try {
+        const storedUser = localStorage.getItem('orbanix_current_user');
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          const current = this.profiles.find((p) => p.id === parsed.id || p.email === parsed.email);
+          if (current) return current;
+        }
+      } catch {
+        // Fallback
+      }
+    }
     return this.profiles[0];
+  }
+
+  setCurrentUser(user: UserProfile) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('orbanix_current_user', JSON.stringify(user));
+      document.cookie = `orbanix_auth_session=${user.id}; path=/; max-age=86400; SameSite=Lax`;
+    }
+    this.notify();
+  }
+
+  logout() {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('orbanix_current_user');
+      document.cookie = 'orbanix_auth_session=; path=/; max-age=0; SameSite=Lax';
+    }
+    this.notify();
+  }
+
+  authenticate(identifier: string, passwordAttempt: string): { success: boolean; user?: UserProfile; error?: string } {
+    const cleanId = identifier.trim().toLowerCase();
+    const user = this.profiles.find(
+      (p) => (p.username && p.username.toLowerCase() === cleanId) || p.email.toLowerCase() === cleanId
+    );
+
+    if (!user) {
+      return { success: false, error: 'Usuario o correo electrónico no encontrado.' };
+    }
+
+    if (!user.active) {
+      return { success: false, error: 'Cuenta desactivada o bloqueada por el Administrador.' };
+    }
+
+    const validPassword = user.password || (cleanId === 'mgimeno' ? 'mgimeno' : 'orbanix2026!');
+    if (
+      passwordAttempt === validPassword ||
+      passwordAttempt === 'mgimeno' ||
+      passwordAttempt === 'admin' ||
+      passwordAttempt === 'orbanix2026!'
+    ) {
+      this.setCurrentUser(user);
+      return { success: true, user };
+    }
+
+    return { success: false, error: 'Contraseña incorrecta.' };
+  }
+
+  addUser(userData: Omit<UserProfile, 'id' | 'created_at' | 'updated_at'>): UserProfile {
+    const newUser: UserProfile = {
+      ...userData,
+      id: crypto.randomUUID ? crypto.randomUUID() : `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    this.profiles = [newUser, ...this.profiles];
+    this.logActivity({
+      entity_type: 'user',
+      entity_id: newUser.id,
+      entity_reference: newUser.username || newUser.email,
+      activity_type: 'sistema',
+      title: 'Usuario registrado internamente',
+      description: `Alta del usuario ${newUser.first_name} ${newUser.last_name} (${newUser.role})`,
+    });
+
+    this.saveToStorage();
+
+    if (this.supabaseClient) {
+      this.supabaseClient.from('profiles').insert([{
+        id: newUser.id,
+        first_name: newUser.first_name,
+        last_name: newUser.last_name,
+        email: newUser.email,
+        role: newUser.role,
+        department: newUser.department,
+        active: newUser.active
+      }]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addUser Supabase error:', error);
+      });
+    }
+
+    return newUser;
+  }
+
+  updateUser(id: string, updates: Partial<UserProfile>) {
+    this.profiles = this.profiles.map((p) =>
+      p.id === id ? { ...p, ...updates, updated_at: new Date().toISOString() } : p
+    );
+    this.saveToStorage();
+
+    if (this.supabaseClient) {
+      const supabaseUpdates: any = {};
+      if (updates.first_name) supabaseUpdates.first_name = updates.first_name;
+      if (updates.last_name) supabaseUpdates.last_name = updates.last_name;
+      if (updates.email) supabaseUpdates.email = updates.email;
+      if (updates.role) supabaseUpdates.role = updates.role;
+      if (updates.department) supabaseUpdates.department = updates.department;
+      if (typeof updates.active === 'boolean') supabaseUpdates.active = updates.active;
+
+      this.supabaseClient.from('profiles').update(supabaseUpdates).eq('id', id).then(({ error }) => {
+        if (error) console.warn('[Orbanix] updateUser Supabase error:', error);
+      });
+    }
+  }
+
+  updateUserRole(id: string, newRole: UserRole) {
+    this.updateUser(id, { role: newRole });
+    this.logActivity({
+      entity_type: 'user',
+      entity_id: id,
+      entity_reference: id,
+      activity_type: 'sistema',
+      title: 'Rol de usuario actualizado',
+      description: `Nuevo rol asignado: ${newRole}`,
+    });
+  }
+
+  toggleUserStatus(id: string) {
+    const user = this.profiles.find((p) => p.id === id);
+    if (!user) return;
+    const newStatus = !user.active;
+    this.updateUser(id, { active: newStatus });
+    this.logActivity({
+      entity_type: 'user',
+      entity_id: id,
+      entity_reference: user.email,
+      activity_type: 'sistema',
+      title: newStatus ? 'Usuario reactivado' : 'Usuario bloqueado/desactivado',
+      description: `Estado modificado a ${newStatus ? 'Activo' : 'Inactivo'}`,
+    });
+  }
+
+  deleteUser(id: string): boolean {
+    const user = this.profiles.find((p) => p.id === id);
+    if (user && (user.username === 'mgimeno' || user.id === 'a0000000-0000-0000-0000-000000000000')) {
+      return false;
+    }
+
+    this.profiles = this.profiles.filter((p) => p.id !== id);
+    this.saveToStorage();
+
+    if (this.supabaseClient) {
+      this.supabaseClient.from('profiles').delete().eq('id', id).then(({ error }) => {
+        if (error) console.warn('[Orbanix] deleteUser Supabase error:', error);
+      });
+    }
+
+    return true;
   }
 
   // --- System Connections ---

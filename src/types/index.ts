@@ -1,8 +1,76 @@
-export type UserRole = 'admin' | 'manager' | 'analyst' | 'commercial' | 'accounting' | 'viewer';
+export type UserRole = 
+  | 'admin' 
+  | 'manager' 
+  | 'analyst' 
+  | 'commercial' 
+  | 'compliance' 
+  | 'accounting' 
+  | 'viewer';
+
+export interface RoleInfo {
+  role: UserRole;
+  label: string;
+  shortLabel: string;
+  description: string;
+  badgeColor: string;
+}
+
+export const ROLE_DEFINITIONS: Record<UserRole, RoleInfo> = {
+  admin: {
+    role: 'admin',
+    label: 'Super Administrador',
+    shortLabel: 'Admin',
+    description: 'Control total de la plataforma, gestión de usuarios, roles, base de datos y auditoría.',
+    badgeColor: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800',
+  },
+  manager: {
+    role: 'manager',
+    label: 'Gestor Inmobiliario (Asset Manager)',
+    shortLabel: 'Gestor Inmobiliario',
+    description: 'Gestión técnica y comercial de activos (Open Market, Run Off, NPL, Institucional), comercialización y llaves.',
+    badgeColor: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800',
+  },
+  analyst: {
+    role: 'analyst',
+    label: 'Analista de Inversiones (Investment Analyst)',
+    shortLabel: 'Analista Inversión',
+    description: 'Modelización de rentabilidad, análisis de carteras, cálculo de TIR y Múltiplos, y comités de inversión.',
+    badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800',
+  },
+  commercial: {
+    role: 'commercial',
+    label: 'Director Comercial / Broker',
+    shortLabel: 'Comercial / Broker',
+    description: 'Pipeline de operaciones (Kanban), relación con inversores y compradores, gestión de mandatos y leads.',
+    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800',
+  },
+  compliance: {
+    role: 'compliance',
+    label: 'Responsable PBC & Legal (Compliance)',
+    shortLabel: 'Compliance & PBC',
+    description: 'Control de prevención de blanqueo de capitales, KYC, validación de fondos y prescripciones judiciales.',
+    badgeColor: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800',
+  },
+  accounting: {
+    role: 'accounting',
+    label: 'Responsable Financiero (Contabilidad)',
+    shortLabel: 'Financiero / Contable',
+    description: 'Liquidación de honorarios, comisiones de éxito por deals, control de facturación y balances.',
+    badgeColor: 'bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-950/50 dark:text-cyan-300 dark:border-cyan-800',
+  },
+  viewer: {
+    role: 'viewer',
+    label: 'Auditor / Lector Institucional',
+    shortLabel: 'Auditor / Lector',
+    description: 'Acceso de solo consulta para comités de seguimiento, bancos colaboradores y auditorías externas.',
+    badgeColor: 'bg-neutral-100 text-neutral-800 border-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-700',
+  },
+};
 
 export interface UserProfile {
   id: string;
   auth_user_id?: string;
+  username: string;
   first_name: string;
   last_name: string;
   email: string;
@@ -11,6 +79,7 @@ export interface UserProfile {
   role: UserRole;
   department: string;
   active: boolean;
+  password?: string;
   created_at: string;
   updated_at: string;
 }
@@ -230,7 +299,7 @@ export interface Activity {
   id: string;
   user_id?: string;
   user_name?: string;
-  entity_type: 'asset' | 'client' | 'operation' | 'lead' | 'owner' | 'portfolio' | 'pbc';
+  entity_type: 'asset' | 'client' | 'operation' | 'lead' | 'owner' | 'portfolio' | 'pbc' | 'user';
   entity_id: string;
   entity_reference?: string;
   activity_type: ActivityType;

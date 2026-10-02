@@ -24,7 +24,9 @@ export function Topbar({ onToggleSidebar }: TopbarProps) {
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [isHelpOpen, setIsHelpOpen] = React.useState(false);
   const [isMessagesOpen, setIsMessagesOpen] = React.useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
   const [isDarkMode, setIsDarkMode] = React.useState(false);
+  const currentUser = store.getCurrentUser();
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -155,6 +157,71 @@ export function Topbar({ onToggleSidebar }: TopbarProps) {
           >
             {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
+
+          {/* User Profile Pill & Dropdown */}
+          <div className="relative pl-1 border-l border-neutral-200 dark:border-neutral-800">
+            <button
+              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+              className="flex items-center gap-2 p-1 pl-1.5 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+            >
+              <div className="h-7 w-7 rounded-full bg-purple-950 text-purple-200 border border-purple-800/60 flex items-center justify-center text-[11px] font-bold">
+                {currentUser.first_name[0]}{currentUser.last_name[0]}
+              </div>
+              <div className="hidden sm:block text-left pr-1">
+                <p className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 leading-tight">
+                  {currentUser.first_name} {currentUser.last_name}
+                </p>
+                <p className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">
+                  {currentUser.role === 'admin' ? 'Super Admin' : currentUser.role}
+                </p>
+              </div>
+            </button>
+
+            {isUserMenuOpen && (
+              <div className="absolute right-0 mt-2 w-64 rounded-xl border border-neutral-200 bg-white p-3 shadow-xl z-50 animate-in fade-in dark:border-neutral-800 dark:bg-neutral-900">
+                <div className="pb-3 border-b border-neutral-100 dark:border-neutral-800">
+                  <p className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
+                    {currentUser.first_name} {currentUser.last_name}
+                  </p>
+                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
+                    @{currentUser.username || 'mgimeno'} · {currentUser.email}
+                  </p>
+                  <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                    {currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role}
+                  </span>
+                </div>
+
+                <div className="py-2 space-y-1 text-xs">
+                  <a
+                    href="/equipo"
+                    onClick={() => setIsUserMenuOpen(false)}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                  >
+                    Gestión de Usuarios y Roles
+                  </a>
+                  <a
+                    href="/configuracion"
+                    onClick={() => setIsUserMenuOpen(false)}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                  >
+                    Configuración de Cuenta
+                  </a>
+                </div>
+
+                <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                  <button
+                    onClick={() => {
+                      store.logout();
+                      window.location.href = '/login';
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:hover:bg-red-950/70 dark:text-red-400 text-xs font-medium transition-colors cursor-pointer"
+                  >
+                    Cerrar sesión
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
