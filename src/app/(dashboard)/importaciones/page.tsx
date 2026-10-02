@@ -122,7 +122,7 @@ export default function ImportacionesPage() {
         total_rows: rawRows.length,
         successful_rows: successCount,
         failed_rows: rawRows.length - successCount,
-        imported_by: store.getCurrentUser().first_name,
+        imported_by: store.getCurrentUser()?.first_name || 'Admin',
       });
 
       setImportedCount(successCount);

@@ -178,14 +178,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-[#14171d]/60 mb-2">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="h-7 w-7 rounded-full bg-purple-950/80 border border-purple-800/60 flex items-center justify-center text-[10px] font-bold text-purple-200 shrink-0">
-                {user.first_name[0]}{user.last_name[0]}
+                {user?.first_name?.[0] || 'O'}{user?.last_name?.[0] || 'X'}
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-white truncate">
-                  {user.first_name} {user.last_name}
+                  {user ? `${user.first_name} ${user.last_name}` : 'Usuario'}
                 </p>
                 <p className="text-[10px] text-purple-300/80 truncate capitalize">
-                  {user.role === 'admin' ? 'Super Admin' : user.role} · @{user.username || 'mgimeno'}
+                  {user?.role === 'admin' ? 'Super Admin' : (user?.role || 'Usuario')} · @{user?.username || 'usuario'}
                 </p>
               </div>
             </div>

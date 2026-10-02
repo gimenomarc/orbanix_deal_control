@@ -476,27 +476,21 @@ class DataStore {
     return this.profiles;
   }
 
-  getCurrentUser(): UserProfile {
+  getCurrentUser(): UserProfile | null {
     if (typeof window !== 'undefined') {
       try {
         const storedUser = localStorage.getItem('orbanix_current_user');
         if (storedUser) {
           const parsed = JSON.parse(storedUser);
           const current = this.profiles.find((p) => p.id === parsed.id || p.email === parsed.email);
-          if (current) return current;
+          if (current && current.active) return current;
+          if (parsed && parsed.id && parsed.active !== false) return parsed as UserProfile;
         }
       } catch {
         // Fallback
       }
     }
-    // Default to Marc Gimeno Cervantes (Super Admin)
-    const marc = this.profiles.find(
-      (p) =>
-        p.id === 'a0000000-0000-0000-0000-000000000000' ||
-        (p.username && p.username.toLowerCase() === 'mgimeno') ||
-        (p.email && p.email.toLowerCase().includes('mgimeno'))
-    );
-    return marc || this.profiles[0] || initialProfiles[0];
+    return null;
   }
 
   setCurrentUser(user: UserProfile) {
@@ -1236,7 +1230,7 @@ class DataStore {
     const newActivity: Activity = {
       ...activity,
       id: generateUUID(),
-      user_name: activity.user_name || this.getCurrentUser().first_name,
+      user_name: activity.user_name || this.getCurrentUser()?.first_name || 'Sistema',
       created_at: new Date().toISOString(),
     };
     this.activities = [newActivity, ...this.activities];

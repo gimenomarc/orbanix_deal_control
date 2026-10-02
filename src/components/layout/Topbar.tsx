@@ -75,7 +75,7 @@ export function Topbar({ onToggleSidebar }: TopbarProps) {
 
   const handleQuickCommentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCommentText.trim()) return;
+    if (!newCommentText.trim() || !currentUser) return;
     store.logActivity({
       entity_type: 'user',
       entity_id: currentUser.id,
@@ -309,14 +309,14 @@ export function Topbar({ onToggleSidebar }: TopbarProps) {
               aria-expanded={isUserMenuOpen}
             >
               <div className="h-7 w-7 rounded-full bg-purple-950 text-purple-200 border border-purple-800/60 flex items-center justify-center text-[11px] font-bold">
-                {currentUser.first_name[0]}{currentUser.last_name[0]}
+                {currentUser?.first_name?.[0] || 'O'}{currentUser?.last_name?.[0] || 'X'}
               </div>
               <div className="hidden sm:block text-left pr-1">
                 <p className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 leading-tight">
-                  {currentUser.first_name} {currentUser.last_name}
+                  {currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Usuario'}
                 </p>
                 <p className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">
-                  {currentUser.role === 'admin' ? 'Super Admin' : currentUser.role}
+                  {currentUser?.role === 'admin' ? 'Super Admin' : (currentUser?.role || 'Usuario')}
                 </p>
               </div>
             </button>
@@ -325,13 +325,13 @@ export function Topbar({ onToggleSidebar }: TopbarProps) {
               <div className="absolute right-0 mt-2 w-64 rounded-xl border border-neutral-200 bg-white p-3 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 dark:border-neutral-800 dark:bg-neutral-900">
                 <div className="pb-3 border-b border-neutral-100 dark:border-neutral-800">
                   <p className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
-                    {currentUser.first_name} {currentUser.last_name}
+                    {currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Usuario'}
                   </p>
                   <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
-                    @{currentUser.username || 'mgimeno'} · {currentUser.email}
+                    @{currentUser?.username || 'usuario'} · {currentUser?.email || 'orbanixgroup.com'}
                   </p>
                   <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                    {currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role}
+                    {currentUser?.role === 'admin' ? 'Super Administrador' : (currentUser?.role || 'Usuario')}
                   </span>
                 </div>
 
