@@ -463,71 +463,88 @@ CREATE POLICY "Public write portfolios" ON portfolios FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read clients" ON clients;
 CREATE POLICY "Public read clients" ON clients FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write clients" ON clients FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write clients" ON clients;
+CREATE POLICY "Public write clients" ON clients FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read assets" ON assets;
 CREATE POLICY "Public read assets" ON assets FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write assets" ON assets FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write assets" ON assets;
+CREATE POLICY "Public write assets" ON assets FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read operations" ON operations;
 CREATE POLICY "Public read operations" ON operations FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write operations" ON operations FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write operations" ON operations;
+CREATE POLICY "Public write operations" ON operations FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read leads" ON leads;
 CREATE POLICY "Public read leads" ON leads FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write leads" ON leads FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write leads" ON leads;
+CREATE POLICY "Public write leads" ON leads FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read events" ON events;
 CREATE POLICY "Public read events" ON events FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write events" ON events FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write events" ON events;
+CREATE POLICY "Public write events" ON events FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read activities" ON activities;
 CREATE POLICY "Public read activities" ON activities FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write activities" ON activities FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write activities" ON activities;
+CREATE POLICY "Public write activities" ON activities FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read documents" ON documents;
 CREATE POLICY "Public read documents" ON documents FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write documents" ON documents FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write documents" ON documents;
+CREATE POLICY "Public write documents" ON documents FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read notifications" ON notifications;
 CREATE POLICY "Public read notifications" ON notifications FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write notifications" ON notifications FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write notifications" ON notifications;
+CREATE POLICY "Public write notifications" ON notifications FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read objectives" ON objectives;
 CREATE POLICY "Public read objectives" ON objectives FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write objectives" ON objectives FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write objectives" ON objectives;
+CREATE POLICY "Public write objectives" ON objectives FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read analyses" ON investment_analyses;
 CREATE POLICY "Public read analyses" ON investment_analyses FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write analyses" ON investment_analyses FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write analyses" ON investment_analyses;
+CREATE POLICY "Public write analyses" ON investment_analyses FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read pbc" ON compliance_pbc;
 CREATE POLICY "Public read pbc" ON compliance_pbc FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write pbc" ON compliance_pbc FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write pbc" ON compliance_pbc;
+CREATE POLICY "Public write pbc" ON compliance_pbc FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read prescriptions" ON prescriptions;
 CREATE POLICY "Public read prescriptions" ON prescriptions FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write prescriptions" ON prescriptions FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write prescriptions" ON prescriptions;
+CREATE POLICY "Public write prescriptions" ON prescriptions FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read accounting" ON accounting_transactions;
 CREATE POLICY "Public read accounting" ON accounting_transactions FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write accounting" ON accounting_transactions FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write accounting" ON accounting_transactions;
+CREATE POLICY "Public write accounting" ON accounting_transactions FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read collaborators" ON collaborators;
 CREATE POLICY "Public read collaborators" ON collaborators FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write collaborators" ON collaborators FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write collaborators" ON collaborators;
+CREATE POLICY "Public write collaborators" ON collaborators FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read imports" ON imports;
 CREATE POLICY "Public read imports" ON imports FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write imports" ON imports FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write imports" ON imports;
+CREATE POLICY "Public write imports" ON imports FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read audit_logs" ON audit_logs;
 CREATE POLICY "Public read audit_logs" ON audit_logs FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write audit_logs" ON audit_logs FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write audit_logs" ON audit_logs;
+CREATE POLICY "Public write audit_logs" ON audit_logs FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public read connections" ON system_connections;
 CREATE POLICY "Public read connections" ON system_connections FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Public write connections" ON system_connections FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public write connections" ON system_connections;
+CREATE POLICY "Public write connections" ON system_connections FOR ALL USING (true);
 
 -- 5. INITIAL SEED DATA
 INSERT INTO profiles (id, first_name, last_name, email, role, department, active) VALUES
