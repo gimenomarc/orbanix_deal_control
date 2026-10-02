@@ -6,8 +6,8 @@ import { store } from '@/lib/data/store';
 export function useStore() {
   useSyncExternalStore(
     (onStoreChange) => store.subscribe(onStoreChange),
-    () => store,
-    () => store
+    () => store.getVersion(),
+    () => 0
   );
 
   return store;

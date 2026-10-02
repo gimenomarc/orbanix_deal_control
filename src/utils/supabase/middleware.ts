@@ -28,8 +28,15 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  // Refresh auth session
-  await supabase.auth.getUser();
+  // Refresh auth session only if auth cookies exist
+  try {
+    const hasAuthCookie = request.cookies.getAll().some(c => c.name.startsWith('sb-'));
+    if (hasAuthCookie) {
+      await supabase.auth.getUser();
+    }
+  } catch {
+    // Avoid blocking request on network or auth errors
+  }
 
   return supabaseResponse;
 }

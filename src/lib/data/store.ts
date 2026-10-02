@@ -44,6 +44,8 @@ import {
   initialDocuments,
 } from './mockData';
 
+import { createClient } from '@/lib/supabase/client';
+
 type Listener = () => void;
 
 class DataStore {
@@ -69,11 +71,227 @@ class DataStore {
 
   private listeners: Set<Listener> = new Set();
   private initialized = false;
+  private version = 0;
+  private supabaseClient: ReturnType<typeof createClient> | null = null;
+  private realtimeChannel: any = null;
+  private isSyncing = false;
 
   constructor() {
     if (typeof window !== 'undefined') {
       this.loadFromStorage();
+      this.initSupabaseSync();
     }
+  }
+
+  public getVersion() {
+    return this.version;
+  }
+
+  private initSupabaseSync() {
+    try {
+      this.supabaseClient = createClient();
+      this.syncFromSupabase();
+      this.setupRealtimeSubscription();
+
+      // Listen for window focus to re-sync if user edited data in Supabase tab
+      window.addEventListener('focus', () => {
+        this.syncFromSupabase();
+      });
+
+      // Periodic background polling fallback (every 6 seconds)
+      setInterval(() => {
+        this.syncFromSupabase();
+      }, 6000);
+    } catch (err) {
+      console.warn('[Orbanix] Supabase sync skipped:', err);
+    }
+  }
+
+  public async syncFromSupabase() {
+    if (!this.supabaseClient || this.isSyncing) return;
+    this.isSyncing = true;
+    try {
+      const [
+        assetsRes,
+        clientsRes,
+        operationsRes,
+        leadsRes,
+        analysesRes,
+        prescriptionsRes,
+        objectivesRes,
+        accountingRes,
+        collaboratorsRes,
+        ownersRes,
+        portfoliosRes,
+        profilesRes,
+        connectionsRes
+      ] = await Promise.all([
+        this.supabaseClient.from('assets').select('*').order('created_at', { ascending: false }),
+        this.supabaseClient.from('clients').select('*').order('created_at', { ascending: false }),
+        this.supabaseClient.from('operations').select('*').order('created_at', { ascending: false }),
+        this.supabaseClient.from('leads').select('*').order('created_at', { ascending: false }),
+        this.supabaseClient.from('investment_analyses').select('*').order('created_at', { ascending: false }),
+        this.supabaseClient.from('prescriptions').select('*').order('due_date', { ascending: true }),
+        this.supabaseClient.from('objectives').select('*'),
+        this.supabaseClient.from('accounting_transactions').select('*').order('date', { ascending: false }),
+        this.supabaseClient.from('collaborators').select('*'),
+        this.supabaseClient.from('owners').select('*'),
+        this.supabaseClient.from('portfolios').select('*'),
+        this.supabaseClient.from('profiles').select('*'),
+        this.supabaseClient.from('system_connections').select('*')
+      ]);
+
+      let hasChanges = false;
+
+      if (assetsRes.data && assetsRes.data.length > 0) {
+        this.assets = assetsRes.data as Asset[];
+        hasChanges = true;
+      }
+      if (clientsRes.data && clientsRes.data.length > 0) {
+        this.clients = clientsRes.data as Client[];
+        hasChanges = true;
+      }
+      if (operationsRes.data && operationsRes.data.length > 0) {
+        this.operations = operationsRes.data as Operation[];
+        hasChanges = true;
+      }
+      if (leadsRes.data && leadsRes.data.length > 0) {
+        this.leads = leadsRes.data as Lead[];
+        hasChanges = true;
+      }
+      if (analysesRes.data && analysesRes.data.length > 0) {
+        this.investmentAnalyses = analysesRes.data as InvestmentAnalysis[];
+        hasChanges = true;
+      }
+      if (prescriptionsRes.data && prescriptionsRes.data.length > 0) {
+        this.prescriptions = prescriptionsRes.data as Prescription[];
+        hasChanges = true;
+      }
+      if (objectivesRes.data && objectivesRes.data.length > 0) {
+        this.objectives = objectivesRes.data as Objective[];
+        hasChanges = true;
+      }
+      if (accountingRes.data && accountingRes.data.length > 0) {
+        this.accounting = accountingRes.data as AccountingTransaction[];
+        hasChanges = true;
+      }
+      if (collaboratorsRes.data && collaboratorsRes.data.length > 0) {
+        this.collaborators = collaboratorsRes.data as Collaborator[];
+        hasChanges = true;
+      }
+      if (ownersRes.data && ownersRes.data.length > 0) {
+        this.owners = ownersRes.data as Owner[];
+        hasChanges = true;
+      }
+      if (portfoliosRes.data && portfoliosRes.data.length > 0) {
+        this.portfolios = portfoliosRes.data as Portfolio[];
+        hasChanges = true;
+      }
+      if (profilesRes.data && profilesRes.data.length > 0) {
+        this.profiles = profilesRes.data as UserProfile[];
+        hasChanges = true;
+      }
+      if (connectionsRes.data && connectionsRes.data.length > 0) {
+        this.systemConnections = connectionsRes.data as SystemConnection[];
+        hasChanges = true;
+      }
+
+      if (hasChanges) {
+        this.saveToStorage(false);
+        this.notify();
+      }
+    } catch (e) {
+      console.warn('[Orbanix] Sync from Supabase failed (using local store):', e);
+    } finally {
+      this.isSyncing = false;
+    }
+  }
+
+  private setupRealtimeSubscription() {
+    if (!this.supabaseClient) return;
+
+    this.realtimeChannel = this.supabaseClient
+      .channel('orbanix-db-realtime-channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'assets' },
+        (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            this.assets = [payload.new as Asset, ...this.assets.filter(a => a.id !== payload.new.id)];
+          } else if (payload.eventType === 'UPDATE') {
+            this.assets = this.assets.map(a => a.id === payload.new.id ? { ...a, ...(payload.new as Asset) } : a);
+          } else if (payload.eventType === 'DELETE') {
+            this.assets = this.assets.filter(a => a.id !== payload.old.id);
+          }
+          this.saveToStorage(false);
+          this.notify();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'clients' },
+        (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            this.clients = [payload.new as Client, ...this.clients.filter(c => c.id !== payload.new.id)];
+          } else if (payload.eventType === 'UPDATE') {
+            this.clients = this.clients.map(c => c.id === payload.new.id ? { ...c, ...(payload.new as Client) } : c);
+          } else if (payload.eventType === 'DELETE') {
+            this.clients = this.clients.filter(c => c.id !== payload.old.id);
+          }
+          this.saveToStorage(false);
+          this.notify();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'operations' },
+        (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            this.operations = [payload.new as Operation, ...this.operations.filter(o => o.id !== payload.new.id)];
+          } else if (payload.eventType === 'UPDATE') {
+            this.operations = this.operations.map(o => o.id === payload.new.id ? { ...o, ...(payload.new as Operation) } : o);
+          } else if (payload.eventType === 'DELETE') {
+            this.operations = this.operations.filter(o => o.id !== payload.old.id);
+          }
+          this.saveToStorage(false);
+          this.notify();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leads' },
+        (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            this.leads = [payload.new as Lead, ...this.leads.filter(l => l.id !== payload.new.id)];
+          } else if (payload.eventType === 'UPDATE') {
+            this.leads = this.leads.map(l => l.id === payload.new.id ? { ...l, ...(payload.new as Lead) } : l);
+          } else if (payload.eventType === 'DELETE') {
+            this.leads = this.leads.filter(l => l.id !== payload.old.id);
+          }
+          this.saveToStorage(false);
+          this.notify();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'prescriptions' },
+        (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            this.prescriptions = [payload.new as Prescription, ...this.prescriptions.filter(p => p.id !== payload.new.id)];
+          } else if (payload.eventType === 'UPDATE') {
+            this.prescriptions = this.prescriptions.map(p => p.id === payload.new.id ? { ...p, ...(payload.new as Prescription) } : p);
+          } else if (payload.eventType === 'DELETE') {
+            this.prescriptions = this.prescriptions.filter(p => p.id !== payload.old.id);
+          }
+          this.saveToStorage(false);
+          this.notify();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Orbanix] ⚡ Supabase Realtime connected');
+        }
+      });
   }
 
   private loadFromStorage() {
@@ -107,7 +325,7 @@ class DataStore {
     }
   }
 
-  private saveToStorage() {
+  private saveToStorage(shouldNotify = true) {
     if (typeof window === 'undefined') return;
     try {
       const state = {
@@ -134,7 +352,9 @@ class DataStore {
     } catch (e) {
       console.warn('Storage save failed:', e);
     }
-    this.notify();
+    if (shouldNotify) {
+      this.notify();
+    }
   }
 
   public subscribe(listener: Listener) {
@@ -145,6 +365,7 @@ class DataStore {
   }
 
   private notify() {
+    this.version++;
     this.listeners.forEach((l) => l());
   }
 
@@ -194,6 +415,11 @@ class DataStore {
       description: `Alta del cliente ${newClient.legal_name}`,
     });
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('clients').insert([newClient]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addClient supabase error:', error);
+      });
+    }
     return newClient;
   }
   updateClient(id: string, updates: Partial<Client>) {
@@ -201,10 +427,20 @@ class DataStore {
       c.id === id ? { ...c, ...updates, updated_at: new Date().toISOString() } : c
     );
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('clients').update(updates).eq('id', id).then(({ error }) => {
+        if (error) console.warn('[Orbanix] updateClient supabase error:', error);
+      });
+    }
   }
   deleteClient(id: string) {
     this.clients = this.clients.filter((c) => c.id !== id);
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('clients').delete().eq('id', id).then(({ error }) => {
+        if (error) console.warn('[Orbanix] deleteClient supabase error:', error);
+      });
+    }
   }
 
   // --- Owners & Portfolios ---
@@ -267,7 +503,7 @@ class DataStore {
     const ref = `AST-${String(nextNum).padStart(6, '0')}`;
     const newAsset: Asset = {
       ...asset,
-      id: `asset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: crypto.randomUUID ? crypto.randomUUID() : `asset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       reference: ref,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -282,6 +518,11 @@ class DataStore {
       description: `Alta del activo ${newAsset.title} (${newAsset.branch.toUpperCase()})`,
     });
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('assets').insert([newAsset]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addAsset supabase error:', error);
+      });
+    }
     return newAsset;
   }
   updateAsset(id: string, updates: Partial<Asset>) {
@@ -289,10 +530,20 @@ class DataStore {
       a.id === id ? { ...a, ...updates, updated_at: new Date().toISOString() } : a
     );
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('assets').update(updates).eq('id', id).then(({ error }) => {
+        if (error) console.warn('[Orbanix] updateAsset supabase error:', error);
+      });
+    }
   }
   deleteAsset(id: string) {
     this.assets = this.assets.filter((a) => a.id !== id);
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('assets').delete().eq('id', id).then(({ error }) => {
+        if (error) console.warn('[Orbanix] deleteAsset supabase error:', error);
+      });
+    }
   }
 
   // --- Operations ---
@@ -313,7 +564,7 @@ class DataStore {
     const ref = `OP-${String(nextNum).padStart(6, '0')}`;
     const newOp: Operation = {
       ...operation,
-      id: `op-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: crypto.randomUUID ? crypto.randomUUID() : `op-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       reference: ref,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -328,6 +579,11 @@ class DataStore {
       description: `Creada operación ${newOp.title} (${newOp.type})`,
     });
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('operations').insert([newOp]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addOperation supabase error:', error);
+      });
+    }
     return newOp;
   }
   updateOperation(id: string, updates: Partial<Operation>) {
@@ -335,10 +591,20 @@ class DataStore {
       o.id === id ? { ...o, ...updates, updated_at: new Date().toISOString() } : o
     );
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('operations').update(updates).eq('id', id).then(({ error }) => {
+        if (error) console.warn('[Orbanix] updateOperation supabase error:', error);
+      });
+    }
   }
   deleteOperation(id: string) {
     this.operations = this.operations.filter((o) => o.id !== id);
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('operations').delete().eq('id', id).then(({ error }) => {
+        if (error) console.warn('[Orbanix] deleteOperation supabase error:', error);
+      });
+    }
   }
 
   // --- Leads ---
@@ -360,6 +626,11 @@ class DataStore {
     };
     this.leads = [newLead, ...this.leads];
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('leads').insert([newLead]).then(({ error }) => {
+        if (error) console.warn('[Orbanix] addLead supabase error:', error);
+      });
+    }
     return newLead;
   }
   updateLead(id: string, updates: Partial<Lead>) {
@@ -367,10 +638,20 @@ class DataStore {
       l.id === id ? { ...l, ...updates, updated_at: new Date().toISOString() } : l
     );
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('leads').update(updates).eq('id', id).then(({ error }) => {
+        if (error) console.warn('[Orbanix] updateLead supabase error:', error);
+      });
+    }
   }
   deleteLead(id: string) {
     this.leads = this.leads.filter((l) => l.id !== id);
     this.saveToStorage();
+    if (this.supabaseClient) {
+      this.supabaseClient.from('leads').delete().eq('id', id).then(({ error }) => {
+        if (error) console.warn('[Orbanix] deleteLead supabase error:', error);
+      });
+    }
   }
 
   // --- Events (Agenda) ---
