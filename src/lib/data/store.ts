@@ -129,6 +129,9 @@ class DataStore {
 
   public async syncFromSupabase() {
     if (!this.supabaseClient || this.isSyncing) return;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    if (!url || url.includes('placeholder')) return;
+
     this.isSyncing = true;
     try {
       const [
@@ -163,15 +166,15 @@ class DataStore {
 
       let hasChanges = false;
 
-      if (assetsRes.data && assetsRes.data.length > 0) {
+      if (!assetsRes.error && assetsRes.data !== null) {
         this.assets = assetsRes.data as Asset[];
         hasChanges = true;
       }
-      if (clientsRes.data && clientsRes.data.length > 0) {
+      if (!clientsRes.error && clientsRes.data !== null) {
         this.clients = clientsRes.data as Client[];
         hasChanges = true;
       }
-      if (operationsRes.data && operationsRes.data.length > 0) {
+      if (!operationsRes.error && operationsRes.data !== null) {
         this.operations = (operationsRes.data as Operation[]).map((op) => {
           const matchedClient = this.clients.find((c) => c.id === op.client_id);
           const matchedAsset = this.assets.find((a) => a.id === op.asset_id);
@@ -185,11 +188,11 @@ class DataStore {
         });
         hasChanges = true;
       }
-      if (leadsRes.data && leadsRes.data.length > 0) {
+      if (!leadsRes.error && leadsRes.data !== null) {
         this.leads = leadsRes.data as Lead[];
         hasChanges = true;
       }
-      if (analysesRes.data && analysesRes.data.length > 0) {
+      if (!analysesRes.error && analysesRes.data !== null) {
         this.investmentAnalyses = (analysesRes.data as InvestmentAnalysis[]).map((an) => {
           const matchedAsset = this.assets.find((a) => a.id === an.asset_id);
           const mockMatch = initialInvestmentAnalyses.find((ia) => ia.id === an.id);
@@ -203,7 +206,7 @@ class DataStore {
         });
         hasChanges = true;
       }
-      if (prescriptionsRes.data && prescriptionsRes.data.length > 0) {
+      if (!prescriptionsRes.error && prescriptionsRes.data !== null) {
         this.prescriptions = (prescriptionsRes.data as Prescription[]).map((pr) => {
           let entityTitle = pr.entity_title;
           if (!entityTitle) {
@@ -223,27 +226,27 @@ class DataStore {
         });
         hasChanges = true;
       }
-      if (objectivesRes.data && objectivesRes.data.length > 0) {
+      if (!objectivesRes.error && objectivesRes.data !== null) {
         this.objectives = objectivesRes.data as Objective[];
         hasChanges = true;
       }
-      if (accountingRes.data && accountingRes.data.length > 0) {
+      if (!accountingRes.error && accountingRes.data !== null) {
         this.accounting = accountingRes.data as AccountingTransaction[];
         hasChanges = true;
       }
-      if (collaboratorsRes.data && collaboratorsRes.data.length > 0) {
+      if (!collaboratorsRes.error && collaboratorsRes.data !== null) {
         this.collaborators = collaboratorsRes.data as Collaborator[];
         hasChanges = true;
       }
-      if (ownersRes.data && ownersRes.data.length > 0) {
+      if (!ownersRes.error && ownersRes.data !== null) {
         this.owners = ownersRes.data as Owner[];
         hasChanges = true;
       }
-      if (portfoliosRes.data && portfoliosRes.data.length > 0) {
+      if (!portfoliosRes.error && portfoliosRes.data !== null) {
         this.portfolios = portfoliosRes.data as Portfolio[];
         hasChanges = true;
       }
-      if (profilesRes.data && profilesRes.data.length > 0) {
+      if (!profilesRes.error && profilesRes.data !== null) {
         this.profiles = (profilesRes.data as UserProfile[]).map((p) => {
           const emailPrefix = p.email ? p.email.split('@')[0] : '';
           const mockMatch = initialProfiles.find(
@@ -270,7 +273,7 @@ class DataStore {
         }
         hasChanges = true;
       }
-      if (connectionsRes.data && connectionsRes.data.length > 0) {
+      if (!connectionsRes.error && connectionsRes.data !== null) {
         this.systemConnections = connectionsRes.data as SystemConnection[];
         hasChanges = true;
       }
