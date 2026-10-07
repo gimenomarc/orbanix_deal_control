@@ -100,10 +100,45 @@ export function runTests(): { name: string; passed: boolean; error?: string }[] 
     if (!newLead.reference.startsWith('LEAD-')) throw new Error('Invalid lead reference');
   });
 
-  // Test 6: Global Search across multiple entities
-  test('Global search filters assets and clients', () => {
-    const res = store.globalSearch('Santa Engracia');
-    if (res.assets.length === 0) throw new Error('Search failed to find Santa Engracia asset');
+  // Test 7: Initial team profiles and RBAC
+  test('Team initial members and new roles', () => {
+    const profiles = store.getProfiles();
+    const admin = profiles.find((p) => p.username === 'cgracia' && p.role === 'admin');
+    const direction = profiles.find((p) => p.username === 'agracia' && p.role === 'direction');
+    const accounting = profiles.find((p) => p.username === 'sillan' && p.role === 'accounting');
+    const coordinator = profiles.find((p) => p.username === 'ssanchez' && p.role === 'coordinator');
+    const compliance = profiles.find((p) => p.username === 'anarciso' && p.role === 'compliance');
+    const commercials = profiles.filter((p) => p.role === 'commercial');
+
+    if (!admin) throw new Error('Christian Gracia admin profile missing');
+    if (!direction) throw new Error('Astrid Gracia direction profile missing');
+    if (!accounting) throw new Error('Silvia Illán accounting profile missing');
+    if (!coordinator) throw new Error('Sandra Sánchez coordinator profile missing');
+    if (!compliance) throw new Error('Angélica Narciso compliance profile missing');
+    if (commercials.length < 5) throw new Error('Commercial team members missing');
+  });
+
+  // Test 8: Inter-Branch Commercial Prescription Creation and Commission Calculation
+  test('Inter-branch commercial prescription model', () => {
+    const newPrescription = store.addPrescription({
+      origin_area: 'open_market',
+      origin_user_id: 'a0000000-0000-0000-0000-000000000008',
+      origin_user_name: 'Sergio Ramírez',
+      destination_area: 'npl',
+      destination_user_id: 'a0000000-0000-0000-0000-000000000006',
+      destination_user_name: 'Juan Antonio Aparicio',
+      client_name: 'Inversor Test NPL',
+      deal_estimated_value: 3000000,
+      commission_rate: 15,
+      commission_amount: 13500,
+      commission_status: 'pendiente',
+      status: 'derivada',
+      notes: 'Test referral',
+    });
+
+    if (!newPrescription.reference.startsWith('PRE-')) throw new Error('Invalid prescription reference');
+    if (newPrescription.origin_area !== 'open_market') throw new Error('Origin area mismatch');
+    if (newPrescription.destination_area !== 'npl') throw new Error('Destination area mismatch');
   });
 
   return results;

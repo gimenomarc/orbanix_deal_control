@@ -21,6 +21,9 @@ import {
   Collaborator,
   ImportRecord,
   SystemConnection,
+  AppModule,
+  RolePermissions,
+  DEFAULT_ROLE_PERMISSIONS,
 } from '@/types';
 
 import {
@@ -80,6 +83,7 @@ class DataStore {
   private imports: ImportRecord[] = initialImports;
   private activities: Activity[] = initialActivities;
   private documents: DocumentItem[] = initialDocuments;
+  private rolePermissions: RolePermissions = { ...DEFAULT_ROLE_PERMISSIONS };
 
   private listeners: Set<Listener> = new Set();
   private initialized = false;
@@ -178,12 +182,11 @@ class DataStore {
         this.operations = (operationsRes.data as Operation[]).map((op) => {
           const matchedClient = this.clients.find((c) => c.id === op.client_id);
           const matchedAsset = this.assets.find((a) => a.id === op.asset_id);
-          const mockMatch = initialOperations.find((io) => io.id === op.id);
           return {
             ...op,
-            client_name: op.client_name || matchedClient?.legal_name || mockMatch?.client_name || 'Cliente Corporativo',
-            asset_title: op.asset_title || matchedAsset?.title || mockMatch?.asset_title || 'Activo Inmobiliario',
-            asset_reference: op.asset_reference || matchedAsset?.reference || mockMatch?.asset_reference || '',
+            client_name: op.client_name || matchedClient?.legal_name || 'Cliente Corporativo',
+            asset_title: op.asset_title || matchedAsset?.title || 'Activo Inmobiliario',
+            asset_reference: op.asset_reference || matchedAsset?.reference || '',
           };
         });
         hasChanges = true;
@@ -195,13 +198,12 @@ class DataStore {
       if (!analysesRes.error && analysesRes.data !== null) {
         this.investmentAnalyses = (analysesRes.data as InvestmentAnalysis[]).map((an) => {
           const matchedAsset = this.assets.find((a) => a.id === an.asset_id);
-          const mockMatch = initialInvestmentAnalyses.find((ia) => ia.id === an.id);
           return {
             ...an,
-            branch: an.branch || matchedAsset?.branch || mockMatch?.branch || 'open_market',
-            phase: an.phase || matchedAsset?.phase || mockMatch?.phase || 'comercializacion',
-            asset_title: an.asset_title || matchedAsset?.title || mockMatch?.asset_title || 'Activo Institucional',
-            asset_reference: an.asset_reference || matchedAsset?.reference || mockMatch?.asset_reference || 'AST-000001',
+            branch: an.branch || matchedAsset?.branch || 'open_market',
+            phase: an.phase || matchedAsset?.phase || 'comercializacion',
+            asset_title: an.asset_title || matchedAsset?.title || 'Activo Institucional',
+            asset_reference: an.asset_reference || matchedAsset?.reference || 'AST-000001',
           };
         });
         hasChanges = true;
@@ -218,10 +220,9 @@ class DataStore {
               entityTitle = this.operations.find((o) => o.id === pr.entity_id)?.title || 'Operación en Curso';
             }
           }
-          const mockMatch = initialPrescriptions.find((ip) => ip.id === pr.id);
           return {
             ...pr,
-            entity_title: entityTitle || mockMatch?.entity_title || 'Expediente Judicial',
+            entity_title: entityTitle || 'Expediente Judicial',
           };
         });
         hasChanges = true;
@@ -246,31 +247,39 @@ class DataStore {
         this.portfolios = portfoliosRes.data as Portfolio[];
         hasChanges = true;
       }
-      if (!profilesRes.error && profilesRes.data !== null) {
-        this.profiles = (profilesRes.data as UserProfile[]).map((p) => {
+      if (!profilesRes.error && profilesRes.data !== null && profilesRes.data.length > 0) {
+        // Map Supabase remote profiles and preserve the detailed client-side role definitions
+        const remoteProfiles: UserProfile[] = (profilesRes.data as UserProfile[]).map((p) => {
           const emailPrefix = p.email ? p.email.split('@')[0] : '';
           const mockMatch = initialProfiles.find(
             (ip) => ip.id === p.id || (p.email && ip.email.toLowerCase() === p.email.toLowerCase())
           );
           const username = (p as any).username || mockMatch?.username || emailPrefix;
           const password = (p as any).password || mockMatch?.password || (username === 'mgimeno' ? 'mgimeno' : 'orbanix2026!');
+          // If initialProfiles defines a specific specialized role (e.g. coordinator, compliance, direction, admin), respect it
+          const role = mockMatch?.role || p.role;
+          const department = mockMatch?.department || p.department;
           return {
             ...p,
+            role,
+            department,
             username,
             password,
           };
         });
 
-        // Ensure Marc Gimeno is always in the active profiles list
-        const hasMarc = this.profiles.some(
-          (p) => (p.username && p.username.toLowerCase() === 'mgimeno') || (p.email && p.email.toLowerCase().includes('mgimeno'))
-        );
-        if (!hasMarc) {
-          const marcInitial = initialProfiles.find((p) => p.username === 'mgimeno');
-          if (marcInitial) {
-            this.profiles = [marcInitial, ...this.profiles];
+        // Ensure all real initial team members are present
+        const mergedProfiles: UserProfile[] = [...remoteProfiles];
+        for (const initialMember of initialProfiles) {
+          const exists = mergedProfiles.some(
+            (p) => p.id === initialMember.id || (p.email && p.email.toLowerCase() === initialMember.email.toLowerCase())
+          );
+          if (!exists) {
+            mergedProfiles.push(initialMember);
           }
         }
+
+        this.profiles = mergedProfiles;
         hasChanges = true;
       }
       if (!connectionsRes.error && connectionsRes.data !== null) {
@@ -386,7 +395,13 @@ class DataStore {
   private loadFromStorage() {
     if (this.initialized) return;
     try {
-      const stored = localStorage.getItem('orbanix_crm_data_v1');
+      // Clear legacy storage versions with old mock data
+      localStorage.removeItem('orbanix_crm_data_v4');
+      localStorage.removeItem('orbanix_crm_data_v3');
+      localStorage.removeItem('orbanix_crm_data_v2');
+      localStorage.removeItem('orbanix_crm_data_v1');
+
+      const stored = localStorage.getItem('orbanix_crm_data_v5');
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed.clients) this.clients = parsed.clients;
@@ -407,21 +422,40 @@ class DataStore {
         if (parsed.documents) this.documents = parsed.documents;
         if (parsed.imports) this.imports = parsed.imports;
         if (parsed.systemConnections) this.systemConnections = parsed.systemConnections;
+        if (parsed.rolePermissions) {
+          this.rolePermissions = { ...DEFAULT_ROLE_PERMISSIONS, ...parsed.rolePermissions };
+        }
         if (parsed.profiles && Array.isArray(parsed.profiles) && parsed.profiles.length > 0) {
-          this.profiles = parsed.profiles;
+          // Remove old mock profiles (Lucía Serrano, Carlos Gómez, Elena Romero, old Admin)
+          const validProfiles = parsed.profiles.filter(
+            (p: UserProfile) => !['lserrano', 'cgomez', 'eromero'].includes(p.username || '') && !['admin@orbanixgroup.com', 'lserrano@orbanixgroup.com', 'cgomez@orbanixgroup.com', 'eromero@orbanixgroup.com'].includes(p.email?.toLowerCase())
+          );
+          this.profiles = validProfiles.length > 0 ? validProfiles : initialProfiles;
         }
       }
 
-      // Guarantee Marc Gimeno Cervantes is always present in profiles
-      const hasMarc = this.profiles.some(
-        (p) => (p.username && p.username.toLowerCase() === 'mgimeno') || (p.email && p.email.toLowerCase().includes('mgimeno'))
-      );
-      if (!hasMarc) {
-        const marcInitial = initialProfiles.find((p) => p.username === 'mgimeno');
-        if (marcInitial) {
-          this.profiles = [marcInitial, ...this.profiles];
+      // Guarantee all real team members from initialProfiles are in profiles
+      const currentList = [...this.profiles];
+      for (const realMember of initialProfiles) {
+        const idx = currentList.findIndex(
+          (p) => p.id === realMember.id || (p.email && p.email.toLowerCase() === realMember.email.toLowerCase())
+        );
+        if (idx === -1) {
+          currentList.push(realMember);
+        } else {
+          // Keep updated role and metadata
+          currentList[idx] = {
+            ...currentList[idx],
+            first_name: realMember.first_name,
+            last_name: realMember.last_name,
+            role: realMember.role,
+            department: realMember.department,
+            username: realMember.username,
+            phone: realMember.phone,
+          };
         }
       }
+      this.profiles = currentList;
 
       this.initialized = true;
     } catch {
@@ -452,8 +486,9 @@ class DataStore {
         imports: this.imports,
         systemConnections: this.systemConnections,
         profiles: this.profiles,
+        rolePermissions: this.rolePermissions,
       };
-      localStorage.setItem('orbanix_crm_data_v1', JSON.stringify(state));
+      localStorage.setItem('orbanix_crm_data_v5', JSON.stringify(state));
     } catch (e) {
       console.warn('Storage save failed:', e);
     }
@@ -681,6 +716,49 @@ class DataStore {
     return true;
   }
 
+  // --- Role Permissions & Access Control ---
+  getRolePermissions(): RolePermissions {
+    return { ...this.rolePermissions };
+  }
+
+  getModulesForRole(role: UserRole): AppModule[] {
+    return this.rolePermissions[role] || DEFAULT_ROLE_PERMISSIONS[role] || ['inicio'];
+  }
+
+  hasModuleAccess(role: UserRole, module: AppModule): boolean {
+    if (role === 'admin') return true;
+    const allowed = this.getModulesForRole(role);
+    return allowed.includes(module);
+  }
+
+  updateRolePermissions(role: UserRole, modules: AppModule[]): boolean {
+    // Admin always retains full control over all modules
+    if (role === 'admin') {
+      this.rolePermissions.admin = [...DEFAULT_ROLE_PERMISSIONS.admin];
+    } else {
+      // Ensure 'inicio' is always accessible so users can land safely
+      const uniqueModules: AppModule[] = Array.from(new Set(modules.includes('inicio') ? modules : (['inicio', ...modules] as AppModule[])));
+      this.rolePermissions[role] = uniqueModules;
+    }
+
+    this.logActivity({
+      entity_type: 'user',
+      entity_id: `perm-${role}`,
+      entity_reference: role,
+      activity_type: 'sistema',
+      title: 'Permisos de rol modificados',
+      description: `Los accesos asignados al perfil [${role}] han sido actualizados por un Administrador.`,
+    });
+
+    this.saveToStorage();
+    return true;
+  }
+
+  resetRolePermissions(): void {
+    this.rolePermissions = { ...DEFAULT_ROLE_PERMISSIONS };
+    this.saveToStorage();
+  }
+
   // --- System Connections ---
   getSystemConnections() {
     return this.systemConnections;
@@ -720,11 +798,71 @@ class DataStore {
     });
     this.saveToStorage();
     if (this.supabaseClient) {
-      this.supabaseClient.from('clients').insert([newClient]).then(({ error }) => {
+      const { assigned_user_name, ...dbRow } = newClient;
+      if (assigned_user_name && !dbRow.assigned_user_id) {
+        const matched = this.profiles.find(
+          (p) =>
+            p.first_name.toLowerCase() === assigned_user_name.toLowerCase() ||
+            `${p.first_name} ${p.last_name}`.toLowerCase() === assigned_user_name.toLowerCase()
+        );
+        if (matched) dbRow.assigned_user_id = matched.id;
+      }
+      this.supabaseClient.from('clients').insert([dbRow]).then(({ error }) => {
         if (error) console.warn('[Orbanix] addClient supabase error:', error);
       });
     }
     return newClient;
+  }
+  addClientsBatch(newClientsList: Array<Omit<Client, 'id' | 'reference' | 'created_at' | 'updated_at'>>) {
+    const startNum = this.clients.length + 1;
+    const now = new Date().toISOString();
+    const created: Client[] = newClientsList.map((c, idx) => ({
+      ...c,
+      id: generateUUID(),
+      reference: `CLI-${String(startNum + idx).padStart(6, '0')}`,
+      created_at: now,
+      updated_at: now,
+    }));
+
+    // Prepend newly imported clients
+    this.clients = [...created, ...this.clients];
+
+    // Single consolidated activity log for high performance
+    this.logActivity({
+      entity_type: 'client',
+      entity_id: created[0]?.id || 'bulk',
+      entity_reference: 'CLI-BATCH',
+      activity_type: 'sistema',
+      title: 'Importación masiva de clientes',
+      description: `Se han importado exitosamente ${created.length} clientes en el sistema.`,
+    });
+
+    this.saveToStorage(true);
+
+    // If Supabase is connected, insert in chunks of 200 rows to prevent payload overflow
+    if (this.supabaseClient) {
+      const dbPayload = created.map((c) => {
+        const { assigned_user_name, ...dbRow } = c;
+        if (assigned_user_name && !dbRow.assigned_user_id) {
+          const matched = this.profiles.find(
+            (p) =>
+              p.first_name.toLowerCase() === assigned_user_name.toLowerCase() ||
+              `${p.first_name} ${p.last_name}`.toLowerCase() === assigned_user_name.toLowerCase()
+          );
+          if (matched) dbRow.assigned_user_id = matched.id;
+        }
+        return dbRow;
+      });
+
+      const chunkSize = 200;
+      for (let i = 0; i < dbPayload.length; i += chunkSize) {
+        const chunk = dbPayload.slice(i, i + chunkSize);
+        this.supabaseClient.from('clients').insert(chunk).then(({ error }) => {
+          if (error) console.warn('[Orbanix] bulk addClients supabase error:', error);
+        });
+      }
+    }
+    return created;
   }
   updateClient(id: string, updates: Partial<Client>) {
     this.clients = this.clients.map((c) =>

@@ -27,8 +27,11 @@ import {
   Eye,
   FileText,
   Upload,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { Client, ClientType, ClientStatus } from '@/types';
+import { ClientImportModal } from '@/components/clients/ClientImportModal';
 
 export default function ClientesPage() {
   const store = useStore();
@@ -64,6 +67,11 @@ export default function ClientesPage() {
   // Note text inside drawer
   const [noteText, setNoteText] = React.useState('');
 
+  // Pagination & Import Modal
+  const [isImportModalOpen, setIsImportModalOpen] = React.useState(false);
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(50);
+
   const filteredClients = clients.filter((c) => {
     const matchesSearch =
       c.legal_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -77,6 +85,16 @@ export default function ClientesPage() {
 
     return matchesSearch && matchesType && matchesStatus;
   });
+
+  // Reset page when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, typeFilter, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredClients.length / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredClients.length);
+  const paginatedClients = filteredClients.slice(startIndex, endIndex);
 
   const handleCreateClient = (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,6 +186,15 @@ export default function ClientesPage() {
         description="Directorio de clientes institucionales, fondos de inversión, family offices y contrapartes."
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsImportModalOpen(true)}
+              className="text-xs bg-white dark:bg-neutral-900 border-neutral-300 dark:border-neutral-700 shadow-2xs font-medium"
+            >
+              <Upload className="mr-1.5 h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              Importar Excel / CSV
+            </Button>
             <Button variant="outline" size="sm" onClick={handleExportCSV} className="text-xs">
               <Download className="mr-1.5 h-3.5 w-3.5" />
               Exportar CSV
@@ -248,7 +275,7 @@ export default function ClientesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                {filteredClients.map((client) => (
+                {paginatedClients.map((client) => (
                   <tr
                     key={client.id}
                     className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors"
@@ -314,6 +341,58 @@ export default function ClientesPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Table Pagination Bar */}
+        {filteredClients.length > 0 && (
+          <div className="border-t border-neutral-200 dark:border-neutral-800 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs bg-neutral-50/50 dark:bg-neutral-900/50">
+            <div className="text-neutral-500">
+              Mostrando <strong className="text-neutral-900 dark:text-neutral-100">{startIndex + 1}</strong> a{' '}
+              <strong className="text-neutral-900 dark:text-neutral-100">{endIndex}</strong> de{' '}
+              <strong className="text-neutral-900 dark:text-neutral-100">{filteredClients.length.toLocaleString('es-ES')}</strong> clientes
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 text-neutral-500">
+                <span>Por página:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="rounded border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-2 py-1 text-xs"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={250}>250</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="h-7 w-7 p-0"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="px-2 font-medium text-neutral-700 dark:text-neutral-300">
+                  {currentPage} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="h-7 w-7 p-0"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -612,6 +691,12 @@ export default function ClientesPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Bulk Excel/CSV Client Importer Modal */}
+      <ClientImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+      />
     </div>
   );
 }

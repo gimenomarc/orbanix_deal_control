@@ -589,6 +589,7 @@ export default function OperacionesPage() {
                   if (a) setFormAmount(a.current_value);
                 }}
               >
+                <option value="">(Opcional) Sin activo vinculado</option>
                 {assets.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.reference} — {a.title}
@@ -603,6 +604,7 @@ export default function OperacionesPage() {
                 value={formClientId}
                 onChange={(e) => setFormClientId(e.target.value)}
               >
+                <option value="">(Opcional) Sin cliente vinculado</option>
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.legal_name}

@@ -21,7 +21,9 @@ import {
   Lock,
   Key,
   Info,
+  Sliders,
 } from 'lucide-react';
+import Link from 'next/link';
 import { UserProfile, UserRole, ROLE_DEFINITIONS } from '@/types';
 
 export default function EquipoPage() {
@@ -96,8 +98,8 @@ export default function EquipoPage() {
     const targetUser = profiles.find((p) => p.id === userId);
     if (!targetUser) return;
 
-    if (targetUser.username === 'mgimeno') {
-      toastError('Acción no permitida', 'No puedes bloquear al Administrador Principal.');
+    if (targetUser.username === 'mgimeno' || targetUser.username === 'agracia') {
+      toastError('Acción no permitida', 'No puedes bloquear a la Dirección y Administración Principal.');
       return;
     }
 
@@ -112,8 +114,13 @@ export default function EquipoPage() {
     const targetUser = profiles.find((p) => p.id === userId);
     if (!targetUser) return;
 
-    if (targetUser.username === 'mgimeno' || targetUser.id === 'a0000000-0000-0000-0000-000000000000') {
-      toastError('Acción no permitida', 'No puedes eliminar al Administrador Principal de la plataforma.');
+    if (
+      targetUser.username === 'mgimeno' ||
+      targetUser.username === 'agracia' ||
+      targetUser.id === 'a0000000-0000-0000-0000-000000000000' ||
+      targetUser.id === 'a0000000-0000-0000-0000-000000000002'
+    ) {
+      toastError('Acción no permitida', 'No puedes eliminar a los Administradores Principales de la plataforma.');
       return;
     }
 
@@ -137,10 +144,19 @@ export default function EquipoPage() {
         title="Gestión de Equipo & Roles (RBAC)"
         description="Panel de administración de cuentas internas. El registro público está deshabilitado; solo los Administradores pueden crear usuarios y asignar roles."
         actions={
-          <Button size="sm" onClick={() => setIsModalOpen(true)} className="text-xs cursor-pointer">
-            <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-            Crear nuevo usuario
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/configuracion"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-purple-500/40 bg-purple-500/10 text-purple-700 dark:text-purple-300 hover:bg-purple-500/20 transition-colors shadow-2xs"
+            >
+              <Sliders className="h-3.5 w-3.5" />
+              Configurar Permisos de Perfiles
+            </Link>
+            <Button size="sm" onClick={() => setIsModalOpen(true)} className="text-xs cursor-pointer">
+              <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+              Crear nuevo usuario
+            </Button>
+          </div>
         }
       />
 
@@ -200,7 +216,13 @@ export default function EquipoPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredProfiles.map((p) => {
           const assignedOps = operations.filter((o) => o.assigned_user_id === p.id);
-          const isMainAdmin = p.username === 'mgimeno' || p.id === 'a0000000-0000-0000-0000-000000000000';
+          const isMainAdmin =
+            p.username === 'mgimeno' ||
+            p.username === 'agracia' ||
+            p.username === 'cgracia' ||
+            p.id === 'a0000000-0000-0000-0000-000000000000' ||
+            p.id === 'a0000000-0000-0000-0000-000000000001' ||
+            p.id === 'a0000000-0000-0000-0000-000000000002';
           const roleInfo = ROLE_DEFINITIONS[p.role] || ROLE_DEFINITIONS.viewer;
 
           return (
@@ -263,13 +285,30 @@ export default function EquipoPage() {
                     className="text-xs h-8 bg-neutral-50 dark:bg-neutral-800/80"
                   >
                     <option value="admin">Super Administrador (Control Total)</option>
+                    <option value="direction">Dirección General & Estratégica</option>
+                    <option value="coordinator">Coordinadora de Operaciones</option>
+                    <option value="commercial">Comercial / Broker (Deals)</option>
+                    <option value="accounting">Contabilidad & Finanzas</option>
+                    <option value="compliance">Analista PBC & Legal</option>
                     <option value="manager">Gestor Inmobiliario (Asset Manager)</option>
                     <option value="analyst">Analista de Inversiones (TIR & Múltiplos)</option>
-                    <option value="commercial">Director Comercial / Broker (Deals)</option>
-                    <option value="compliance">Responsable PBC & Legal (Compliance)</option>
-                    <option value="accounting">Responsable Financiero (Contabilidad)</option>
                     <option value="viewer">Auditor / Lector Institucional</option>
                   </Select>
+                </div>
+
+                {/* Role modules access info */}
+                <div className="flex items-center justify-between text-[11px] px-2 py-1 rounded bg-neutral-100/60 dark:bg-neutral-800/40">
+                  <span className="text-neutral-500 font-medium flex items-center gap-1">
+                    <Key className="h-3 w-3 text-purple-500" />
+                    Módulos visibles:
+                  </span>
+                  <Link
+                    href="/configuracion"
+                    className="text-purple-600 dark:text-purple-400 font-semibold hover:underline flex items-center gap-1"
+                    title="Editar módulos visibles para este rol"
+                  >
+                    {store.getModulesForRole(p.role).length} módulos
+                  </Link>
                 </div>
 
                 {/* Operations & Actions Footer */}
@@ -412,22 +451,26 @@ export default function EquipoPage() {
                 onChange={(e) => {
                   const role = e.target.value as UserRole;
                   setFormRole(role);
+                  if (role === 'admin') setFormDepartment('Administración & Control');
+                  if (role === 'direction') setFormDepartment('Dirección General & Estratégica');
+                  if (role === 'coordinator') setFormDepartment('Coordinación & Soporte Operativo');
+                  if (role === 'commercial') setFormDepartment('Red Comercial & Deals');
+                  if (role === 'accounting') setFormDepartment('Contabilidad & Finanzas');
+                  if (role === 'compliance') setFormDepartment('Prevención Blanqueo & Legal');
                   if (role === 'manager') setFormDepartment('Gestión de Activos Inmobiliarios');
                   if (role === 'analyst') setFormDepartment('Análisis Financiero & Investment');
-                  if (role === 'commercial') setFormDepartment('Dirección Comercial & Deals');
-                  if (role === 'compliance') setFormDepartment('Prevención Blanqueo & Legal');
-                  if (role === 'accounting') setFormDepartment('Finanzas & Facturación');
                   if (role === 'viewer') setFormDepartment('Auditoría Externa');
-                  if (role === 'admin') setFormDepartment('Dirección General');
                 }}
               >
+                <option value="commercial">Comercial / Broker (Deals)</option>
+                <option value="coordinator">Coordinadora de Operaciones</option>
+                <option value="direction">Dirección General & Estratégica</option>
+                <option value="accounting">Contabilidad & Finanzas</option>
+                <option value="compliance">Analista PBC & Legal</option>
                 <option value="manager">Gestor Inmobiliario (Asset Manager)</option>
                 <option value="analyst">Analista de Inversiones (TIR & Múltiplos)</option>
-                <option value="commercial">Director Comercial / Broker (Deals)</option>
-                <option value="compliance">Responsable PBC & Legal (Compliance)</option>
-                <option value="accounting">Responsable Financiero (Contabilidad)</option>
-                <option value="viewer">Auditor / Lector Institucional</option>
                 <option value="admin">Super Administrador (Control Total)</option>
+                <option value="viewer">Auditor / Lector Institucional</option>
               </Select>
               <p className="text-[10px] text-neutral-400 mt-1">
                 {ROLE_DEFINITIONS[formRole]?.description}

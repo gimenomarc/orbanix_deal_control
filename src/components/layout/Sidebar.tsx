@@ -48,37 +48,44 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   };
 
   const primaryNav = [
-    { label: 'Investment', href: '/investment', icon: TrendingUp },
-    { label: 'Inicio', href: '/inicio', icon: LayoutGrid },
-    { label: 'Objetivos', href: '/objetivos', icon: Target },
-    { label: 'Prescripciones', href: '/prescripciones', icon: Clock },
-    { label: 'Reporting', href: '/reporting', icon: BarChart3 },
-    { label: 'Equipo', href: '/equipo', icon: Users },
-    { label: 'Agenda', href: '/agenda', icon: Calendar },
-    { label: 'Colaboradores', href: '/colaboradores', icon: Handshake },
-    { label: 'Contabilidad', href: '/contabilidad', icon: Wallet },
-    { label: 'Avisos', href: '/avisos', icon: Bell },
-    { label: 'Leads', href: '/leads', icon: Megaphone },
+    { module: 'investment' as const, label: 'Investment', href: '/investment', icon: TrendingUp },
+    { module: 'inicio' as const, label: 'Inicio', href: '/inicio', icon: LayoutGrid },
+    { module: 'objetivos' as const, label: 'Objetivos', href: '/objetivos', icon: Target },
+    { module: 'prescripciones' as const, label: 'Prescripciones', href: '/prescripciones', icon: Clock },
+    { module: 'reporting' as const, label: 'Reporting', href: '/reporting', icon: BarChart3 },
+    { module: 'equipo' as const, label: 'Equipo', href: '/equipo', icon: Users },
+    { module: 'agenda' as const, label: 'Agenda', href: '/agenda', icon: Calendar },
+    { module: 'colaboradores' as const, label: 'Colaboradores', href: '/colaboradores', icon: Handshake },
+    { module: 'contabilidad' as const, label: 'Contabilidad', href: '/contabilidad', icon: Wallet },
+    { module: 'avisos' as const, label: 'Avisos', href: '/avisos', icon: Bell },
+    { module: 'leads' as const, label: 'Leads', href: '/leads', icon: Megaphone },
   ];
 
   const gestionNav = [
-    { label: 'Clientes', href: '/clientes', icon: User },
-    { label: 'Operaciones', href: '/operaciones', icon: Briefcase },
-    { label: 'PBC', href: '/pbc', icon: ShieldCheck },
+    { module: 'clientes' as const, label: 'Clientes', href: '/clientes', icon: User },
+    { module: 'operaciones' as const, label: 'Operaciones', href: '/operaciones', icon: Briefcase },
+    { module: 'pbc' as const, label: 'PBC', href: '/pbc', icon: ShieldCheck },
   ];
 
   const activosNav = [
-    { label: 'Open Market', href: '/activos/open_market', icon: Building2 },
-    { label: 'Run Off', href: '/activos/run_off', icon: RefreshCw },
-    { label: 'NPL', href: '/activos/npl', icon: FileWarning },
-    { label: 'Institucional', href: '/activos/institutional', icon: Landmark },
+    { module: 'activos' as const, label: 'Open Market', href: '/activos/open_market', icon: Building2 },
+    { module: 'activos' as const, label: 'Run Off', href: '/activos/run_off', icon: RefreshCw },
+    { module: 'activos' as const, label: 'NPL', href: '/activos/npl', icon: FileWarning },
+    { module: 'activos' as const, label: 'Institucional', href: '/activos/institutional', icon: Landmark },
   ];
 
   const footerNav = [
-    { label: 'Propietarios y carteras', href: '/propietarios', icon: FolderKanban },
-    { label: 'Importar cartera', href: '/importaciones', icon: FileUp },
-    { label: 'Configuración', href: '/configuracion', icon: Settings },
+    { module: 'propietarios' as const, label: 'Propietarios y carteras', href: '/propietarios', icon: FolderKanban },
+    { module: 'importaciones' as const, label: 'Importar cartera', href: '/importaciones', icon: FileUp },
+    { module: 'configuracion' as const, label: 'Configuración', href: '/configuracion', icon: Settings },
   ];
+
+  const userRole = user?.role || 'viewer';
+
+  const visiblePrimaryNav = primaryNav.filter((item) => store.hasModuleAccess(userRole, item.module));
+  const visibleGestionNav = gestionNav.filter((item) => store.hasModuleAccess(userRole, item.module));
+  const visibleActivosNav = store.hasModuleAccess(userRole, 'activos') ? activosNav : [];
+  const visibleFooterNav = footerNav.filter((item) => store.hasModuleAccess(userRole, item.module));
 
   const renderNavItem = (item: { label: string; href: string; icon: React.ComponentType<{ className?: string }> }) => {
     const isActive = pathname === item.href || (item.href !== '/inicio' && pathname.startsWith(item.href));
@@ -143,34 +150,42 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* Scrollable Navigation */}
         <div className="flex-1 overflow-y-auto px-3 py-2 space-y-5">
           {/* Primer Grupo */}
-          <div className="space-y-0.5">
-            {primaryNav.map(renderNavItem)}
-          </div>
+          {visiblePrimaryNav.length > 0 && (
+            <div className="space-y-0.5">
+              {visiblePrimaryNav.map(renderNavItem)}
+            </div>
+          )}
 
           {/* Grupo: GESTIÓN */}
-          <div>
-            <p className="px-3 pb-1.5 text-[10px] font-bold tracking-wider text-[#525b6a] uppercase">
-              GESTIÓN
-            </p>
-            <div className="space-y-0.5">
-              {gestionNav.map(renderNavItem)}
+          {visibleGestionNav.length > 0 && (
+            <div>
+              <p className="px-3 pb-1.5 text-[10px] font-bold tracking-wider text-[#525b6a] uppercase">
+                GESTIÓN
+              </p>
+              <div className="space-y-0.5">
+                {visibleGestionNav.map(renderNavItem)}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Grupo: ACTIVOS */}
-          <div>
-            <p className="px-3 pb-1.5 text-[10px] font-bold tracking-wider text-[#525b6a] uppercase">
-              ACTIVOS
-            </p>
-            <div className="space-y-0.5 pl-1 border-l border-[#1a1e24] ml-2">
-              {activosNav.map(renderNavItem)}
+          {visibleActivosNav.length > 0 && (
+            <div>
+              <p className="px-3 pb-1.5 text-[10px] font-bold tracking-wider text-[#525b6a] uppercase">
+                ACTIVOS
+              </p>
+              <div className="space-y-0.5 pl-1 border-l border-[#1a1e24] ml-2">
+                {visibleActivosNav.map(renderNavItem)}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Separator / Footer Navigation */}
-          <div className="pt-2 border-t border-[#1a1e24] space-y-0.5">
-            {footerNav.map(renderNavItem)}
-          </div>
+          {visibleFooterNav.length > 0 && (
+            <div className="pt-2 border-t border-[#1a1e24] space-y-0.5">
+              {visibleFooterNav.map(renderNavItem)}
+            </div>
+          )}
         </div>
 
         {/* User Block & Logout */}

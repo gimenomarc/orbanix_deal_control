@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { AssetBranch } from '@/types';
+import { parseExcelOrCsvFile } from '@/lib/importers/excelImporter';
+import { ClientImportModal } from '@/components/clients/ClientImportModal';
 
 interface ParsedRow {
   [key: string]: string;
@@ -37,6 +39,7 @@ export default function ImportacionesPage() {
   const [rawHeaders, setRawHeaders] = React.useState<string[]>([]);
   const [rawRows, setRawRows] = React.useState<ParsedRow[]>([]);
   const [isProcessing, setIsProcessing] = React.useState(false);
+  const [isClientModalOpen, setIsClientModalOpen] = React.useState(false);
 
   // Column mapping
   const [mapTitle, setMapTitle] = React.useState('');
@@ -48,38 +51,39 @@ export default function ImportacionesPage() {
   // Execution stats
   const [importedCount, setImportedCount] = React.useState(0);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setFileName(file.name);
-    Papa.parse<ParsedRow>(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        if (results.meta.fields && results.meta.fields.length > 0) {
-          setRawHeaders(results.meta.fields);
-          setRawRows(results.data);
 
-          // Auto-detect matching headers
-          results.meta.fields.forEach((f) => {
-            const lower = f.toLowerCase();
-            if (lower.includes('titulo') || lower.includes('nombre') || lower.includes('activo')) setMapTitle(f);
-            if (lower.includes('valor') || lower.includes('precio') || lower.includes('importe')) setMapValue(f);
-            if (lower.includes('ciudad') || lower.includes('municipio') || lower.includes('provincia')) setMapCity(f);
-            if (lower.includes('rama') || lower.includes('tipo')) setMapBranch(f);
-            if (lower.includes('superficie') || lower.includes('m2')) setMapSurface(f);
-          });
+    if (file.name.toLowerCase().includes('cliente')) {
+      setIsClientModalOpen(true);
+      return;
+    }
 
-          setStep(2);
-        } else {
-          error('Error de lectura', 'El archivo no contiene cabeceras válidas.');
-        }
-      },
-      error: (err) => {
-        error('Error al analizar archivo', err.message);
-      },
-    });
+    try {
+      const parsed = await parseExcelOrCsvFile(file);
+      if (parsed.headers && parsed.headers.length > 0) {
+        setRawHeaders(parsed.headers);
+        setRawRows(parsed.rawRows as any);
+
+        parsed.headers.forEach((f) => {
+          const lower = f.toLowerCase();
+          if (lower.includes('titulo') || lower.includes('nombre') || lower.includes('activo')) setMapTitle(f);
+          if (lower.includes('valor') || lower.includes('precio') || lower.includes('importe')) setMapValue(f);
+          if (lower.includes('ciudad') || lower.includes('municipio') || lower.includes('provincia')) setMapCity(f);
+          if (lower.includes('rama') || lower.includes('tipo')) setMapBranch(f);
+          if (lower.includes('superficie') || lower.includes('m2')) setMapSurface(f);
+        });
+
+        setStep(2);
+      } else {
+        error('Error de lectura', 'El archivo no contiene cabeceras válidas.');
+      }
+    } catch (err: any) {
+      error('Error al analizar archivo', err?.message || 'No se pudo leer el archivo.');
+    }
   };
 
   const handleExecuteImport = () => {
@@ -164,13 +168,24 @@ export default function ImportacionesPage() {
     <div className="space-y-6">
       <PageHeader
         category="Carga Masiva"
-        title="Importar cartera"
-        description="Asistente de 10 pasos para migración masiva de inventario inmobiliario y carteras de deuda."
+        title="Importar cartera y datos"
+        description="Migración masiva de carteras de activos inmobiliarios y directorios de clientes / inversores."
         actions={
-          <Button variant="outline" size="sm" onClick={handleDownloadSample} className="text-xs">
-            <Download className="mr-1.5 h-3.5 w-3.5" />
-            Descargar plantilla CSV
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsClientModalOpen(true)}
+              className="text-xs bg-white dark:bg-neutral-900 border-neutral-300 dark:border-neutral-700 shadow-2xs font-medium"
+            >
+              <Upload className="mr-1.5 h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              Importar Clientes (Excel / CSV)
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleDownloadSample} className="text-xs">
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              Plantilla Activos CSV
+            </Button>
+          </div>
         }
       />
 
@@ -199,20 +214,28 @@ export default function ImportacionesPage() {
               Selecciona o arrastra tu archivo CSV o Excel
             </h3>
             <p className="text-xs text-neutral-500 mt-1 max-w-md">
-              Soporta ficheros delimitados por comas (.csv) y hojas de cálculo con datos de activos inmobiliarios.
+              Soporta hojas de cálculo Excel (.xlsx, .xls) y ficheros delimitados por comas (.csv) para activos o clientes.
             </p>
 
-            <div className="mt-6">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <label className="inline-flex items-center justify-center rounded-md bg-neutral-900 px-4 py-2 text-xs font-medium text-white shadow-xs hover:bg-neutral-800 cursor-pointer dark:bg-white dark:text-neutral-900">
                 <Upload className="mr-2 h-4 w-4" />
-                Examinar archivo
+                Examinar archivo (.xlsx, .xls, .csv)
                 <input
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.xlsx,.xls"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
               </label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsClientModalOpen(true)}
+                className="text-xs border-neutral-300 dark:border-neutral-700"
+              >
+                Importador de Clientes (Clientes Unificados)
+              </Button>
             </div>
           </div>
         )}
@@ -413,6 +436,11 @@ export default function ImportacionesPage() {
           </div>
         </div>
       </div>
+      {/* Client Import Modal */}
+      <ClientImportModal
+        isOpen={isClientModalOpen}
+        onClose={() => setIsClientModalOpen(false)}
+      />
     </div>
   );
 }
